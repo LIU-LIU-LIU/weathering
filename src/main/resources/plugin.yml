@@ -1,0 +1,4 @@
+name: Weathering
+version: '${project.version}'
+main: cc.ahaly.weathering.Weathering
+api-version: '1.21'
