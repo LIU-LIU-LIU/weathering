@@ -1,12 +1,10 @@
 package cc.ahaly.weathering;
 
-import org.bukkit.plugin.Plugin;
+import org.bukkit.Location;
 import org.bukkit.plugin.java.JavaPlugin;
-import net.coreprotect.CoreProtect;
-import net.coreprotect.CoreProtectAPI;
 import org.dynmap.DynmapCommonAPI;
 import org.dynmap.DynmapCommonAPIListener;
-import org.dynmap.markers.MarkerSet;
+import net.coreprotect.CoreProtectAPI;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -14,102 +12,85 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class MyDynmapListener extends DynmapCommonAPIListener {
-    @Override
-    public void apiEnabled(DynmapCommonAPI api) {
-        // API 启用时调用
-        handleApiEnabled(api);
-    }
-
-    private void handleApiEnabled(DynmapCommonAPI api) {
-        MarkerSet markerSet = api.getMarkerAPI().createMarkerSet("myMarkers", "My Markers", null, false);
-        if (markerSet == null) {
-            getLogger().severe("Error creating marker set");
-            return;
-        }
-
-        // 在地图上绘制一个圆形
-        double x = 100;
-        double y = 64;
-        double z = 100;
-        int radius = 10;
-
-        for (int i = 0; i <= 360; i++) {
-            double angle = i * Math.PI / 180;
-            double dx = x + radius * Math.cos(angle);
-            double dz = z + radius * Math.sin(angle);
-            markerSet.createMarker("marker_" + i, "Marker " + i, "world", dx, y, dz, api.getMarkerAPI().getMarkerIcon("default"), false);
-        }
-    }
-}
-
 public final class Weathering extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        DynmapCommonAPIListener.register(new MyDynmapListener());
+        DynmapHandler dynmapHandler = new DynmapHandler();
+        DynmapCommonAPIListener.register(new DynmapCommonAPIListener() {
+            @Override
+            public void apiEnabled(DynmapCommonAPI api) {
+                dynmapHandler.handleApiEnabled(api);
+            }
+        });
 
-        CoreProtectAPI api = getCoreProtect();
+        CoreProtectHandler coreProtectHandler = new CoreProtectHandler(this);
+        CoreProtectAPI api = coreProtectHandler.getCoreProtect();
         if (api != null) {
-            List<File> mcaFiles = getMCAFiles("/opt/MinecraftServer-AHA/survival/world/region");
+//            List<File> mcaFiles = getMCAFiles("/opt/MinecraftServer-AHA/survival/world/region");
+            List<File> mcaFiles = Arrays.asList(
+                    new File("/opt/MinecraftServer-AHA/survival/world/region/r.1.-2.mca"),
+                    new File("/opt/MinecraftServer-AHA/survival/world/region/r.2.0.mca"),
+                    new File("/opt/MinecraftServer-AHA/survival/world/region/r.3.-5.mca"),
+                    new File("/opt/MinecraftServer-AHA/survival/world/region/r.5.1.mca")
+            );
+//            int time = 365 * 86400; // 过去一年的数据
+            int time = 1 * 86400;
+            List<String> restrictUsers = Collections.emptyList();
+            List<String> excludeUsers = Collections.emptyList();
+            List<Object> restrictBlocks = Collections.emptyList();
+            List<Object> excludeBlocks = Collections.emptyList();
+            List<Integer> actionList = Arrays.asList(1, 2); // 1: 放置方块, 2: 拆除方块
+
+            List<File> hasEvents = new ArrayList<>();
+            List<File> noEvents = new ArrayList<>();
+
             for (File mcaFile : mcaFiles) {
                 String[] parts = mcaFile.getName().split("\\.");
                 int regionX = Integer.parseInt(parts[1]);
                 int regionZ = Integer.parseInt(parts[2]);
 
                 int startX = regionX * 512;
-                int endX = startX + 511;
                 int startZ = regionZ * 512;
-                int endZ = startZ + 511;
+                Location center = new Location(getServer().getWorld("world"), startX + 256, 64, startZ + 256);
 
-                // 假设查询过去一年的数据
-                int startTime = 0;
-                int endTime = 365 * 86400;
+                List<String[]> results = coreProtectHandler.performLookup(api, time, center, 256, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
 
-                List<String[]> results = api.performLookup(endTime, null, null, Arrays.asList(startX, endX, startZ, endZ), 0);
-                List<String[]> hasEvents = new ArrayList<>();
-                List<String[]> noEvents = new ArrayList<>();
-
+                boolean hasPlayerEvents = false;
                 for (String[] result : results) {
                     CoreProtectAPI.ParseResult parseResult = api.parseResult(result);
                     if (parseResult != null) {
-                        hasEvents.add(result);
-                    } else {
-                        noEvents.add(result);
+                        hasPlayerEvents = true;
+                        break;
                     }
                 }
 
-                // 输出结果
-                getLogger().info("有玩家事件的列表: " + hasEvents.size());
-                getLogger().info("无玩家事件的列表: " + noEvents.size());
+                if (hasPlayerEvents) {
+                    hasEvents.add(mcaFile);
+                } else {
+                    noEvents.add(mcaFile);
+                }
+            }
+
+            getLogger().info("有玩家事件的列表: " + hasEvents.size());
+            getLogger().info("无玩家事件的列表: " + noEvents.size());
+
+            // 使用 DynmapHandler 绘制区域
+            for (File mcaFile : hasEvents) {
+                String[] parts = mcaFile.getName().split("\\.");
+                int regionX = Integer.parseInt(parts[1]);
+                int regionZ = Integer.parseInt(parts[2]);
+
+                int startX = regionX * 512;
+                int startZ = regionZ * 512;
+                Location center = new Location(getServer().getWorld("world"), startX + 256, 64, startZ + 256);
+
+                dynmapHandler.drawSquareRegion("world", center.getX(), center.getY(), center.getZ(), 512);
             }
         }
     }
 
-
-    private CoreProtectAPI getCoreProtect() {
-        Plugin plugin = getServer().getPluginManager().getPlugin("CoreProtect");
-
-        // Check that CoreProtect is loaded
-        if (plugin == null || !(plugin instanceof CoreProtect)) {
-            return null;
-        }
-
-        // Check that the API is enabled
-        CoreProtectAPI CoreProtect = ((CoreProtect) plugin).getAPI();
-        if (CoreProtect.isEnabled() == false) {
-            return null;
-        }
-
-        // Check that a compatible version of the API is loaded
-        if (CoreProtect.APIVersion() < 10) {
-            return null;
-        }
-
-        return CoreProtect;
-    }
-
-    private List<File> getMCAFiles(String directoryPath) {
+    public List<File> getMCAFiles(String directoryPath) {
         File dir = new File(directoryPath);
         File[] files = dir.listFiles((d, name) -> name.endsWith(".mca"));
         return files != null ? Arrays.asList(files) : Collections.emptyList();
