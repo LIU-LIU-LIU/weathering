@@ -24,7 +24,13 @@ public class CoreProtectHandler {
             return Collections.emptyList();
         }
 
-        return api.performLookup(time, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList, radius, center);
+        // 使用可变的列表
+        List<Object> mutableRestrictBlocks = new ArrayList<>(restrictBlocks);
+        List<Object> mutableExcludeBlocks = new ArrayList<>(excludeBlocks);
+        List<String> mutableRestrictUsers = new ArrayList<>(restrictUsers);
+        List<String> mutableExcludeUsers = new ArrayList<>(excludeUsers);
+
+        return api.performLookup(time, mutableRestrictUsers, mutableExcludeUsers, mutableRestrictBlocks, mutableExcludeBlocks, actionList, radius, center);
     }
 
     public CoreProtectAPI getCoreProtect() {
