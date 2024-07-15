@@ -1,2 +1,5 @@
-#风化时间
-WEATHERING_TIME: 600
+# 风化时间,单位天，默认7天
+WEATHERING_TIME: 7
+
+#MCA 文件目录
+MCA_DIR: "/opt/MinecraftServer-AHA/survival/world/region"

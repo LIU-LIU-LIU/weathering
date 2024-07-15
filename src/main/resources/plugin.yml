@@ -4,14 +4,30 @@ main: cc.ahaly.weathering.Weathering
 api-version: '1.21'
 depend: [CoreProtect]
 softdepend: [dynmap]
-description: A plugin to handle weathering using CoreProtect and optionally Dynmap.
+description: 使用 CoreProtect 和可选的 Dynmap 处理风化的插件。
 commands:
   weathering:
-    description: Main command for the Weathering plugin
-    usage: /<command> <query|list|draw>
+    description: Weathering 插件的主命令
+    usage: /<command> <query|list|draw|reset|remind>
     aliases: [wth]
     permission: weathering.use
+    tab-completer: cc.ahaly.weathering.WeatheringTabCompleter
 permissions:
   weathering.use:
-    description: Allows the use of the Weathering plugin commands
+    description: 允许使用 Weathering 插件的命令
+    default: op
+  weathering.query:
+    description: 允许使用 /weathering query 命令
+    default: true
+  weathering.list:
+    description: 允许使用 /weathering list 命令
+    default: op
+  weathering.draw:
+    description: 允许使用 /weathering draw 命令
+    default: op
+  weathering.reset:
+    description: 允许使用 /weathering reset 命令
+    default: op
+  weathering.remind:
+    description: 允许使用 /weathering remind 命令
     default: op

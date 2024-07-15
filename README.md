@@ -5,7 +5,7 @@
 * 数据查询：通过查询[coreprotect](https://dev.bukkit.org/projects/coreprotect)并分析最近被修改过的区块方块数据。
 * 渲染：可选通过[dynmap](https://www.spigotmc.org/resources/dynmap%C2%AE.274/)插件渲染出玩家活动的区域。
 * 提醒：当玩家进入长期未被修改过的区域时，提醒玩家该区域可能会被自然风化。
-* 重置：自动重置长期未被修改过的区块，使其回到自然生成的状态。
+* 重置：重置长期未被修改过的区块，使其回到自然生成的状态。
 
 ## 安装
 1. 下载 `Weathering.jar` 插件文件。
@@ -33,3 +33,9 @@
     - 在 Dynmap 上绘制无玩家事件的区域。
 - `/weathering draw clear`
     - 清除 Dynmap 上所有绘制的区域。
+
+### 重置/提醒命令
+- `/weathering reset`
+    - 重置所有无玩家事件的区域。
+- `/weathering remind`
+    - 定时提醒所有无玩家事件的区域。
