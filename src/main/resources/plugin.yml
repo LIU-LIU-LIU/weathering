@@ -6,7 +6,12 @@ depend: [CoreProtect]
 softdepend: [dynmap]
 description: A plugin to handle weathering using CoreProtect and optionally Dynmap.
 commands:
-  queryEvents:
-    description: Queries MCA files for player events.
-  drawRegions:
-    description: Draws regions on Dynmap based on player events.
+  weathering:
+    description: Main command for the Weathering plugin
+    usage: /<command> <query|list|draw>
+    aliases: [wth]
+    permission: weathering.use
+permissions:
+  weathering.use:
+    description: Allows the use of the Weathering plugin commands
+    default: op

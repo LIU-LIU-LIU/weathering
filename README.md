@@ -7,17 +7,29 @@
 * 提醒：当玩家进入长期未被修改过的区域时，提醒玩家该区域可能会被自然风化。
 * 重置：自动重置长期未被修改过的区块，使其回到自然生成的状态。
 
+## 安装
+1. 下载 `Weathering.jar` 插件文件。
+2. 将 `Weathering.jar` 文件放入你的 Minecraft 服务器的 `plugins` 目录中。
+3. 确保你已经安装了以下依赖插件：
+    - CoreProtect
+    - Dynmap (可选)
+4. 启动或重启服务器。
+
 ## 命令
-主命令 /Weathering：根据第一个参数分发到不同的子命令处理函数。
+### 查询命令
+- `/weathering query`
+    - 查询玩家所在区域内是否有玩家事件。
+- `/weathering query mca <x> <z>`
+    - 查询指定 MCA 区域内是否有玩家事件。
 
-* /Weathering query [player|mca <x> <z>]：处理查询命令。
-没有参数时，查询玩家所在区域。告诉他这里是否会被风化，如果不会还有多久会，如果会提醒玩家 此区域会被风化，如果不想风化需要玩家在此活动。
+### 列表命令
+- `/weathering list`
+    - 列出所有区域的玩家事件情况，并将结果写入 `hasEvents.txt` 和 `noEvents.txt` 文件。
 
-有 mca <x> <z> 参数时，查询指定区域是否会被风化。
-
-* /Weathering list：列出所有MCA文件并查询是否有事件,将结果写到文本中。
-
-* /Weathering draw [events|weathers|clear]：绘制或清除区域。
-events：绘制有事件的区域。
-weathers：绘制无事件的区域。
-clear：清除绘制的区域。
+### 绘制命令
+- `/weathering draw events`
+    - 在 Dynmap 上绘制有玩家事件的区域。
+- `/weathering draw weathers`
+    - 在 Dynmap 上绘制无玩家事件的区域。
+- `/weathering draw clear`
+    - 清除 Dynmap 上所有绘制的区域。

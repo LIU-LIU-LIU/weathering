@@ -25,6 +25,8 @@ public class CommandHandler implements CommandExecutor {
     private final List<File> hasEvents;
     private final List<File> noEvents;
     private final boolean isDynmapEnabled;
+//    private static final int WEATHERING_TIME = 2 * 365 * 86400; // 风化时间，单位为秒
+    private static final int WEATHERING_TIME = 7 * 86400;
 
     public CommandHandler(Weathering plugin, CoreProtectHandler coreProtectHandler, DynmapHandler dynmapHandler, List<File> mcaFiles, List<File> hasEvents, List<File> noEvents, boolean isDynmapEnabled) {
         this.plugin = plugin;
@@ -82,20 +84,6 @@ public class CommandHandler implements CommandExecutor {
         }
     }
 
-    private void handleListCommand(CommandSender sender) {
-        for (File file : mcaFiles) {
-            boolean hasEvents = checkEventsInFile(file);
-            if (hasEvents) {
-                sender.sendMessage("MCA file " + file.getName() + " has events.");
-            } else {
-                sender.sendMessage("MCA file " + file.getName() + " will be weathered.");
-            }
-        }
-
-        writeFile("hasEvents.txt", hasEvents);
-        writeFile("noEvents.txt", noEvents);
-    }
-
     private void handleDrawCommand(CommandSender sender, String[] args) {
         if (args.length != 2) {
             sender.sendMessage("Usage: /weathering draw <events|weathers|clear>");
@@ -130,44 +118,12 @@ public class CommandHandler implements CommandExecutor {
         }
     }
 
-    private void queryEvents() {
-        CoreProtectAPI coreProtectAPI = coreProtectHandler.getCoreProtect();
-        if (coreProtectAPI == null) {
-            plugin.getLogger().severe("CoreProtect API is not available.");
-            return;
-        }
-
-        int time = 2 * 365 * 86400; // 过去两年的数据
-        List<String> restrictUsers = Collections.emptyList();
-        List<String> excludeUsers = Collections.emptyList();
-        List<Object> restrictBlocks = Collections.emptyList();
-        List<Object> excludeBlocks = Collections.emptyList();
-        List<Integer> actionList = Arrays.asList(1, 2); // 1: 放置方块, 2: 拆除方块
-
+    private void handleListCommand(CommandSender sender) {
         hasEvents.clear();
         noEvents.clear();
 
         for (File mcaFile : mcaFiles) {
-            String[] parts = mcaFile.getName().split("\\.");
-            int regionX = Integer.parseInt(parts[1]);
-            int regionZ = Integer.parseInt(parts[2]);
-
-            int startX = regionX * 512;
-            int startZ = regionZ * 512;
-            Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
-
-            List<String[]> results = coreProtectHandler.performLookup(coreProtectAPI, time, center, 256, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
-
-            boolean hasPlayerEvents = false;
-            for (String[] result : results) {
-                CoreProtectAPI.ParseResult parseResult = coreProtectAPI.parseResult(result);
-                if (parseResult != null) {
-                    hasPlayerEvents = true;
-                    break;
-                }
-            }
-
-            if (hasPlayerEvents) {
+            if (checkEventsInRegion(mcaFile.getName())) {
                 hasEvents.add(mcaFile);
             } else {
                 noEvents.add(mcaFile);
@@ -177,7 +133,7 @@ public class CommandHandler implements CommandExecutor {
         // 将有玩家事件和无玩家事件的列表写入文件
         writeFile("hasEvents.txt", hasEvents);
         writeFile("noEvents.txt", noEvents);
-        plugin.getLogger().info("查询完成。" + hasEvents.size() + " 个区域有玩家事件，" + noEvents.size() + " 个区域无玩家事件。" + " 已写入文件。");
+        sender.sendMessage("查询完成。" + hasEvents.size() + " 个区域有玩家事件，" + noEvents.size() + " 个区域无玩家事件。" + " 已写入文件。");
     }
 
     private void drawRegionsWithEvents() {
@@ -186,15 +142,7 @@ public class CommandHandler implements CommandExecutor {
             return;
         }
         for (File mcaFile : hasEvents) {
-            String[] parts = mcaFile.getName().split("\\.");
-            int regionX = Integer.parseInt(parts[1]);
-            int regionZ = Integer.parseInt(parts[2]);
-
-            int startX = regionX * 512;
-            int startZ = regionZ * 512;
-            Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
-
-            dynmapHandler.drawSquareRegion("world", center.getX(), center.getY(), center.getZ(), 512, true);
+            drawRegion(mcaFile, true);
         }
         plugin.getLogger().info("绘制完成。" + hasEvents.size() + " 个活跃区域已绘制。");
     }
@@ -205,15 +153,7 @@ public class CommandHandler implements CommandExecutor {
             return;
         }
         for (File mcaFile : noEvents) {
-            String[] parts = mcaFile.getName().split("\\.");
-            int regionX = Integer.parseInt(parts[1]);
-            int regionZ = Integer.parseInt(parts[2]);
-
-            int startX = regionX * 512;
-            int startZ = regionZ * 512;
-            Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
-
-            dynmapHandler.drawSquareRegion("world", center.getX(), center.getY(), center.getZ(), 512, false);
+            drawRegion(mcaFile, false);
         }
         plugin.getLogger().info("绘制完成。" + noEvents.size() + " 个不活跃区域已绘制。");
     }
@@ -233,19 +173,48 @@ public class CommandHandler implements CommandExecutor {
         return "r." + regionX + "." + regionZ + ".mca";
     }
 
-    private boolean checkEventsInFile(File file) {
-        // 这里实现你的事件检查逻辑
-        return hasEvents.contains(file);
-    }
-
     private boolean checkEventsInRegion(String mcaRegion) {
-        // 这里实现你的事件检查逻辑
-        for (File file : mcaFiles) {
-            if (file.getName().equals(mcaRegion)) {
-                return hasEvents.contains(file);
+        CoreProtectAPI coreProtectAPI = coreProtectHandler.getCoreProtect();
+        if (coreProtectAPI == null) {
+            plugin.getLogger().severe("CoreProtect API is not available.");
+            return false;
+        }
+
+        List<String> restrictUsers = Collections.emptyList();
+        List<String> excludeUsers = Collections.emptyList();
+        List<Object> restrictBlocks = Collections.emptyList();
+        List<Object> excludeBlocks = Collections.emptyList();
+        List<Integer> actionList = Arrays.asList(1, 2); // 1: 放置方块, 2: 拆除方块
+
+        String[] parts = mcaRegion.split("\\.");
+        int regionX = Integer.parseInt(parts[1]);
+        int regionZ = Integer.parseInt(parts[2]);
+
+        int startX = regionX * 512;
+        int startZ = regionZ * 512;
+        Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
+
+        List<String[]> results = coreProtectHandler.performLookup(coreProtectAPI, WEATHERING_TIME, center, 256, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
+
+        for (String[] result : results) {
+            CoreProtectAPI.ParseResult parseResult = coreProtectAPI.parseResult(result);
+            if (parseResult != null) {
+                return true;
             }
         }
         return false;
+    }
+
+    private void drawRegion(File mcaFile, boolean hasEvents) {
+        String[] parts = mcaFile.getName().split("\\.");
+        int regionX = Integer.parseInt(parts[1]);
+        int regionZ = Integer.parseInt(parts[2]);
+
+        int startX = regionX * 512;
+        int startZ = regionZ * 512;
+        Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
+
+        dynmapHandler.drawSquareRegion("world", center.getX(), center.getY(), center.getZ(), 512, hasEvents);
     }
 
     private void writeFile(String fileName, List<File> files) {

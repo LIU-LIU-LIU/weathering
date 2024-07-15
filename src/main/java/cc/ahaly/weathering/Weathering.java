@@ -43,8 +43,15 @@ public final class Weathering extends JavaPlugin {
         }
 
         // 初始化 MCA 文件列表
-        List<File> mcaFiles = getMCAFiles("/opt/MinecraftServer-AHA/survival/world/region");
+//        List<File> mcaFiles = getMCAFiles("/opt/MinecraftServer-AHA/survival/world/region");
 
+        List<File> mcaFiles = Arrays.asList(
+                new File("/opt/MinecraftServer-AHA/survival/world/region/r.1.-2.mca"),
+                new File("/opt/MinecraftServer-AHA/survival/world/region/r.2.0.mca"),
+                new File("/opt/MinecraftServer-AHA/survival/world/region/r.3.-5.mca"),
+                new File("/opt/MinecraftServer-AHA/survival/world/region/r.5.1.mca"),
+                new File("/opt/MinecraftServer-AHA/survival/world/region/r.-9.4.mca")
+        );
         // 初始化命令处理程序
         CommandHandler commandHandler = new CommandHandler(this, coreProtectHandler, dynmapHandler, mcaFiles, hasEvents, noEvents, isDynmapEnabled);
 
