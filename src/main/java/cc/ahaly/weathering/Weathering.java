@@ -7,7 +7,10 @@ import org.dynmap.DynmapCommonAPI;
 import org.dynmap.DynmapCommonAPIListener;
 import net.coreprotect.CoreProtectAPI;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -19,8 +22,8 @@ public final class Weathering extends JavaPlugin {
     public static String MCA_DIR;
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
-    private final List<File> hasEvents = new ArrayList<>();
-    private final List<File> noEvents = new ArrayList<>();
+    public static List<File> hasEvents = new ArrayList<>();
+    public static List<File> noEvents = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
@@ -59,6 +62,10 @@ public final class Weathering extends JavaPlugin {
         WEATHERING_TIME = weatheringDays * 86400; // 将天数转换为秒数
         String MCA_DIR = config.getString("MCA_DIR", "/opt/MinecraftServer-AHA/survival/world/region");
 
+        // 读取 hasEvents 和 noEvents 文件
+        hasEvents = readFile(new File(getDataFolder(), "hasEvents.txt"));
+        noEvents = readFile(new File(getDataFolder(), "noEvents.txt"));
+
         // 异步初始化 MCA 文件列表
         getMCAFilesAsync(MCA_DIR)
                 .thenAcceptAsync(mcaFiles -> {
@@ -77,6 +84,29 @@ public final class Weathering extends JavaPlugin {
     @Override
     public void onDisable() {
         executor.shutdown();
+    }
+
+    private List<File> readFile(File file) {
+        List<File> fileList = new ArrayList<>();
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    File f = new File(line.trim()); // 确保去掉多余的空白字符
+                    if (f.exists()) {
+                        fileList.add(f);
+                    } else {
+                        getLogger().warning("文件 " + f.getAbsolutePath() + " 不存在。");
+                    }
+                }
+            } catch (IOException e) {
+                getLogger().severe("读取文件 " + file.getName() + " 时出错: " + e.getMessage());
+            }
+        } else {
+            getLogger().info("文件 " + file.getName() + " 不存在，将保持列表为空。");
+        }
+        getLogger().info("从 " + file.getName() + " 读取了 " + fileList.size() + " 个文件。");
+        return fileList;
     }
 
     private CompletableFuture<List<File>> getMCAFilesAsync(String directoryPath) {
