@@ -1,5 +1,10 @@
 # 风化时间,单位天，默认7天
 WEATHERING_TIME: 7
 
+#活跃活动标志列表，默认1,2
+ACTIVE_FLAG_LIST:
+  - 1
+  - 2
+
 #MCA 文件目录
 MCA_DIR: "/opt/MinecraftServer-AHA/survival/world/region"

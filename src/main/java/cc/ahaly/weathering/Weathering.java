@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 public final class Weathering extends JavaPlugin {
 
     public static int WEATHERING_TIME;
-    public static String MCA_DIR;
+    private String MCA_DIR;
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
     public static List<File> hasEvents = new ArrayList<>();
@@ -60,7 +60,7 @@ public final class Weathering extends JavaPlugin {
         FileConfiguration config = getConfig();
         int weatheringDays = config.getInt("WEATHERING_TIME", 7); // 默认值为7天
         WEATHERING_TIME = weatheringDays * 86400; // 将天数转换为秒数
-        String MCA_DIR = config.getString("MCA_DIR", "/opt/MinecraftServer-AHA/survival/world/region");
+        MCA_DIR = config.getString("MCA_DIR", getDataFolder() + "/world/region");
 
         // 读取 hasEvents 和 noEvents 文件
         hasEvents = readFile(new File(getDataFolder(), "hasEvents.txt"));
@@ -92,7 +92,7 @@ public final class Weathering extends JavaPlugin {
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    File f = new File(line.trim()); // 确保去掉多余的空白字符
+                    File f = new File(MCA_DIR, line.trim()); // 添加 MCA_DIR 作为前缀
                     if (f.exists()) {
                         fileList.add(f);
                     } else {
@@ -108,6 +108,7 @@ public final class Weathering extends JavaPlugin {
         getLogger().info("从 " + file.getName() + " 读取了 " + fileList.size() + " 个文件。");
         return fileList;
     }
+
 
     private CompletableFuture<List<File>> getMCAFilesAsync(String directoryPath) {
         return CompletableFuture.supplyAsync(() -> getMCAFiles(directoryPath), executor);

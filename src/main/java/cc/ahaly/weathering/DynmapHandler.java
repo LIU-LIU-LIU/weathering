@@ -42,11 +42,11 @@ public class DynmapHandler {
 
         // 设置区域样式
         if (isActive) {
-            areaMarker.setLineStyle(3, 1.0, 0x00FF00); // 绿色边框
-            areaMarker.setFillStyle(0.35, 0x00FF00);   // 绿色填充
+            areaMarker.setLineStyle(3, 1.0, 0x99FF99); // 淡绿色边框
+            areaMarker.setFillStyle(0.35, 0x99FF99);   // 淡绿色填充
         } else {
-            areaMarker.setLineStyle(3, 1.0, 0xFF0000); // 红色边框
-            areaMarker.setFillStyle(0.35, 0xFF0000);   // 红色填充
+            areaMarker.setLineStyle(3, 1.0, 0xFF9999); // 淡红色边框
+            areaMarker.setFillStyle(0.35, 0xFF9999);   // 淡红色填充
         }
     }
 

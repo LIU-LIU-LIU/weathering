@@ -9,7 +9,9 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import net.coreprotect.CoreProtectAPI;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedWriter;
@@ -207,6 +209,7 @@ public class CommandHandler implements CommandExecutor {
         sender.sendMessage("重置了 " + resetCount + " 个区域。");
     }
 
+    private BukkitTask remindTask;
     private void handleRemindCommand(CommandSender sender, String[] args) {
         if (args.length != 2) {
             sender.sendMessage("用法: /weathering remind <间隔时间>");
@@ -221,7 +224,12 @@ public class CommandHandler implements CommandExecutor {
             return;
         }
 
-        new BukkitRunnable() {
+        if (remindTask != null && !remindTask.isCancelled()) {
+            sender.sendMessage("提醒任务已经在运行。");
+            return;
+        }
+
+        remindTask = new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player player : Bukkit.getOnlinePlayers()) {
@@ -233,10 +241,11 @@ public class CommandHandler implements CommandExecutor {
                     }
                 }
             }
-        }.runTaskTimer(plugin, 0, interval * 20L); // interval * 20L 转换为 tick（1秒 = 20 tick）
+        }.runTaskTimer(plugin, 0, interval * 20L); // 使用正确的 plugin 对象
 
         sender.sendMessage("提醒任务已启动，时间间隔为 " + interval + " 秒。");
     }
+
 
     private void handleQueryCommand(CommandSender sender, String[] args) {
         if (args.length == 1) {
