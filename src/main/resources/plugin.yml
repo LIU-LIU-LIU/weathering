@@ -2,33 +2,17 @@ name: Weathering
 version: '${project.version}'
 main: cc.ahaly.weathering.Weathering
 api-version: '1.21'
-depend: [CoreProtect]
-softdepend: [dynmap]
+softdepend: [CoreProtect,dynmap]
 website: https://github.com/LIU-LIU-LIU/weathering
-description: 使用 CoreProtect 和可选的 Dynmap 处理风化的插件。
-
-permissions:
-  weathering.use:
-    description: "Weathering插件的默认权限"
-    default: true
-    children:
-      weathering.query: true
-  weathering.admin:
-    description: "Weathering插件的op权限"
-    default: op
-    children:
-      weathering.list: true
-      weathering.draw: true
-      weathering.reset: true
-      weathering.remind: true
+description: 使用 CoreProtect的数据库和可选的 Dynmap 处理风化的插件。
 
 commands:
   weathering:
     description: Weathering 插件的主命令
     usage: /<command> <query|list|draw|reset|remind>
     aliases: [wth]
-    permission: weathering.use
     tab-completer: cc.ahaly.weathering.WeatheringTabCompleter
+    permission: weathering.use
   weathering.query:
     description: 查询区块状态
     usage: /weathering query

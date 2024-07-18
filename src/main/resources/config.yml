@@ -8,3 +8,16 @@ ACTIVE_FLAG_LIST:
 
 #MCA 文件目录
 MCA_DIR: "/opt/MinecraftServer-AHA/survival/world/region"
+
+#风化数据来源:Coreprotect-DataBase/CoreProtect-API
+DATA_SOURCE: CoreProtect-API
+#DATA_SOURCE: CoreProtect-DataBase
+
+#如果是数据库请填写数据库信息
+DATABASE:
+  host: localhost
+  port: 3306
+  database: coreprotect
+  username: root
+  password: root
+  table: co_block

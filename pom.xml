@@ -6,7 +6,7 @@
 
   <groupId>cc.ahaly</groupId>
   <artifactId>Weathering</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.1-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>Weathering</name>
@@ -87,5 +87,11 @@
           <version>3.4-beta-3</version>
           <scope>provided</scope>
       </dependency>
+      <dependency>
+          <groupId>com.alibaba</groupId>
+          <artifactId>druid</artifactId>
+          <version>1.2.6</version>
+      </dependency>
+
   </dependencies>
 </project>

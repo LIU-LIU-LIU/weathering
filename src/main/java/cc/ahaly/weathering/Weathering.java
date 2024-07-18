@@ -22,21 +22,52 @@ public final class Weathering extends JavaPlugin {
     private String MCA_DIR;
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
+    private EventChecker eventChecker;
     public static List<File> hasEvents = new ArrayList<>();
     public static List<File> noEvents = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
     public void onEnable() {
-        CoreProtectHandler coreProtectHandler = new CoreProtectHandler(this);
-        CoreProtectAPI coreProtectAPI = coreProtectHandler.getCoreProtect();
-        if (coreProtectAPI == null) {
-            getLogger().severe("CoreProtect not found, disabling plugin.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
+        // 保存默认配置文件到插件目录
+        saveDefaultConfig();
 
-        getLogger().info("CoreProtect found and enabled.");
+        // 读取配置文件中的风化时间（单位：天），并转换为秒数
+        FileConfiguration config = getConfig();
+        // 读取和设置基础配置
+        WEATHERING_TIME = config.getInt("WEATHERING_TIME", 7) * 86400; // 转换为秒
+        MCA_DIR = config.getString("MCA_DIR", getDataFolder() + "/world/region");
+        String dataSource = config.getString("DATA_SOURCE", "CoreProtect-API");
+
+        // 根据数据来源初始化不同的处理器
+        if (dataSource.equals("CoreProtect-API")) {
+            CoreProtectHandler coreProtectHandler = new CoreProtectHandler(this, null);
+            CoreProtectAPI coreProtectAPI = coreProtectHandler.getCoreProtect();
+            if (coreProtectAPI != null) {
+                getLogger().info("CoreProtect API found and enabled.");
+                eventChecker = new CoreProtectHandler(this, coreProtectAPI);
+            } else {
+                getLogger().severe("CoreProtect API not found, disabling plugin.");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
+        } else if (dataSource.equals("CoreProtect-DataBase")) {
+            String host = config.getString("DATABASE.host", "localhost");
+            int port = config.getInt("DATABASE.port", 3306);
+            String database = config.getString("DATABASE.database", "coreprotect");
+            String username = config.getString("DATABASE.username", "root");
+            String password = config.getString("DATABASE.password", "root");
+
+            try {
+                DatabaseManager.setupDataSource(host, port, database, username, password);
+                getLogger().info("Database connected successfully.");
+                eventChecker = new DatabaseEventChecker();
+            } catch (Exception e) {
+                getLogger().severe("Failed to initialize database: " + e.getMessage() + " disabling plugin.");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
+        }
 
         // 获取 Dynmap API
         if (getServer().getPluginManager().getPlugin("dynmap") != null) {
@@ -53,15 +84,6 @@ public final class Weathering extends JavaPlugin {
             getLogger().info("Dynmap not found, continuing without Dynmap support.");
         }
 
-        // 保存默认配置文件到插件目录
-        saveDefaultConfig();
-
-        // 读取配置文件中的风化时间（单位：天），并转换为秒数
-        FileConfiguration config = getConfig();
-        int weatheringDays = config.getInt("WEATHERING_TIME", 7); // 默认值为7天
-        WEATHERING_TIME = weatheringDays * 86400; // 将天数转换为秒数
-        MCA_DIR = config.getString("MCA_DIR", getDataFolder() + "/world/region");
-
         // 读取 hasEvents 和 noEvents 文件
         hasEvents = readFile(new File(getDataFolder(), "hasEvents.txt"));
         noEvents = readFile(new File(getDataFolder(), "noEvents.txt"));
@@ -70,7 +92,7 @@ public final class Weathering extends JavaPlugin {
         getMCAFilesAsync(MCA_DIR)
                 .thenAcceptAsync(mcaFiles -> {
                     // 初始化命令处理程序
-                    CommandHandler commandHandler = new CommandHandler(this, coreProtectHandler, dynmapHandler, mcaFiles, hasEvents, noEvents, isDynmapEnabled);
+                    CommandHandler commandHandler = new CommandHandler(this, eventChecker, dynmapHandler, mcaFiles, hasEvents, noEvents, isDynmapEnabled);
 
                     // 注册命令处理程序
                     Objects.requireNonNull(getCommand("weathering")).setExecutor(commandHandler);
@@ -84,6 +106,10 @@ public final class Weathering extends JavaPlugin {
     @Override
     public void onDisable() {
         executor.shutdown();
+        if (Objects.equals(getConfig().getString("DATA_SOURCE"), "CoreProtect-DataBase")) {
+            DatabaseManager.closeDataSource();
+            getLogger().info("Database connection closed.");
+        }
     }
 
     private List<File> readFile(File file) {
@@ -108,7 +134,6 @@ public final class Weathering extends JavaPlugin {
         getLogger().info("从 " + file.getName() + " 读取了 " + fileList.size() + " 个文件。");
         return fileList;
     }
-
 
     private CompletableFuture<List<File>> getMCAFilesAsync(String directoryPath) {
         return CompletableFuture.supplyAsync(() -> getMCAFiles(directoryPath), executor);
