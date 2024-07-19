@@ -4,13 +4,12 @@ import net.coreprotect.CoreProtect;
 import net.coreprotect.CoreProtectAPI;
 import org.bukkit.Location;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
-
 
 public class CoreProtectHandler implements EventChecker {
     private final Plugin plugin;
@@ -22,21 +21,8 @@ public class CoreProtectHandler implements EventChecker {
     }
 
     @Override
-    public CompletableFuture<List<String[]>> getEventsInRegion(String mcaRegion, Location center, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
-        return CompletableFuture.supplyAsync(() -> {
-            if (coreProtectAPI == null) {
-                plugin.getLogger().log(Level.SEVERE, "CoreProtect API is null");
-                return Collections.emptyList();
-            }
-            List<String[]> results = performLookup(coreProtectAPI, Weathering.WEATHERING_TIME, center, 256, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
-            plugin.getLogger().log(Level.INFO, "CoreProtectHandler results size: " + results.size());
-            return results;
-        });
-    }
-
-
-    public List<String[]> performLookup(CoreProtectAPI api, int time, Location center, int radius, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
-        if (api == null) {
+    public List<String[]> getEventsInRegion(String mcaRegion, Location center, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
+        if (coreProtectAPI == null) {
             plugin.getLogger().severe("CoreProtect API is not available");
             return Collections.emptyList();
         }
@@ -46,25 +32,42 @@ public class CoreProtectHandler implements EventChecker {
         List<String> mutableRestrictUsers = new ArrayList<>(restrictUsers);
         List<String> mutableExcludeUsers = new ArrayList<>(excludeUsers);
 
-        return api.performLookup(time, mutableRestrictUsers, mutableExcludeUsers, mutableRestrictBlocks, mutableExcludeBlocks, actionList, radius, center);
+        return coreProtectAPI.performLookup(Weathering.WEATHERING_TIME, mutableRestrictUsers, mutableExcludeUsers, mutableRestrictBlocks, mutableExcludeBlocks, actionList, 256, center);
+    }
+
+    public CompletableFuture<List<String[]>> getEventsInRegionAsync(String mcaRegion, Location center, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
+        CompletableFuture<List<String[]>> future = new CompletableFuture<>();
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    List<String[]> results = getEventsInRegion(mcaRegion, center, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
+                    future.complete(results);
+                } catch (Exception e) {
+                    plugin.getLogger().severe("Error checking region: " + mcaRegion);
+                    e.printStackTrace();
+                    future.completeExceptionally(e);
+                }
+            }
+        }.runTask(plugin);
+
+        return future;
     }
 
 
     public CoreProtectAPI getCoreProtect() {
         Plugin coreProtectPlugin = plugin.getServer().getPluginManager().getPlugin("CoreProtect");
 
-        // Check that CoreProtect is loaded
-        if (!(coreProtectPlugin instanceof CoreProtect)) {
+        if (coreProtectPlugin == null) {
             return null;
         }
 
-        // Check that the API is enabled
         CoreProtectAPI coreProtectAPI = ((CoreProtect) coreProtectPlugin).getAPI();
         if (!coreProtectAPI.isEnabled()) {
             return null;
         }
 
-        // Check that a compatible version of the API is loaded
         if (coreProtectAPI.APIVersion() < 10) {
             return null;
         }

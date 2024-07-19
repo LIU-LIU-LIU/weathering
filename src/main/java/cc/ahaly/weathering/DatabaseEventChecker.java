@@ -1,7 +1,6 @@
 package cc.ahaly.weathering;
 
 import org.bukkit.Location;
-import org.bukkit.plugin.Plugin;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,31 +13,27 @@ import java.util.concurrent.CompletableFuture;
 
 public class DatabaseEventChecker implements EventChecker {
     @Override
-    public CompletableFuture<List<String[]>> getEventsInRegion(String mcaRegion, Location center, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
-        return CompletableFuture.supplyAsync(() -> {
-            String[] parts = mcaRegion.split("\\.");
-            int regionX = Integer.parseInt(parts[1]);
-            int regionZ = Integer.parseInt(parts[2]);
+    public List<String[]> getEventsInRegion(String mcaRegion, Location center, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
+        String[] parts = mcaRegion.split("\\.");
+        int regionX = Integer.parseInt(parts[1]);
+        int regionZ = Integer.parseInt(parts[2]);
 
-            int startX = regionX * 512;
-            int startZ = regionZ * 512;
-            int endX = startX + 511;
-            int endZ = startZ + 511;
+        int startX = regionX * 512;
+        int startZ = regionZ * 512;
+        int endX = startX + 511;
+        int endZ = startZ + 511;
 
-            try (Connection connection = DatabaseManager.getConnection()) {
-                String sql = buildSqlQuery(startX, endX, startZ, endZ, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
-                try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        List<String[]> results = processResultSet(rs);
-                        System.out.println("DatabaseEventChecker results size: " + results.size());
-                        return results;
-                    }
+        try (Connection connection = DatabaseManager.getConnection()) {
+            String sql = buildSqlQuery(startX, endX, startZ, endZ, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                try (ResultSet rs = stmt.executeQuery()) {
+                    return processResultSet(rs);
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                return Collections.emptyList();
             }
-        });
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
     }
 
     private String buildSqlQuery(int startX, int endX, int startZ, int endZ, List<String> restrictUsers, List<String> excludeUsers, List<Object> restrictBlocks, List<Object> excludeBlocks, List<Integer> actionList) {
