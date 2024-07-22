@@ -1,4 +1,4 @@
-package cc.ahaly.weathering;
+package cc.ahaly.weathering.util;
 
 import com.alibaba.druid.pool.DruidDataSource;
 

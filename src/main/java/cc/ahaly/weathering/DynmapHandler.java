@@ -8,12 +8,10 @@ import java.util.Set;
 
 public class DynmapHandler {
     private MarkerSet markerSet;
-    private DynmapCommonAPI api;
     private static final String ACTIVE_REGION_PREFIX = "active_region_";
     private static final String INACTIVE_REGION_PREFIX = "inactive_region_";
 
     public void handleApiEnabled(DynmapCommonAPI api) {
-        this.api = api;
         markerSet = api.getMarkerAPI().createMarkerSet("weathering.markerset", "Weathering Regions", null, false);
         if (markerSet == null) {
             System.err.println("Error creating marker set");

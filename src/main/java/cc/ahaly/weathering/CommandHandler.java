@@ -1,5 +1,6 @@
 package cc.ahaly.weathering;
 
+import cc.ahaly.weathering.check.EventChecker;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -15,31 +16,33 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static cc.ahaly.weathering.util.McaTransform.*;
 
 public class CommandHandler implements CommandExecutor {
     private final Weathering plugin;
-    private final EventChecker eventChecker;
     private final DynmapHandler dynmapHandler;
+    private final EventChecker eventChecker;
     private final List<File> mcaFiles;
     private final List<File> hasEvents;
     private final List<File> noEvents;
-    private final boolean isDynmapEnabled;
     private final ExecutorService executor;
 
-    public CommandHandler(Weathering plugin, EventChecker eventChecker, DynmapHandler dynmapHandler, List<File> mcaFiles, List<File> hasEvents, List<File> noEvents, boolean isDynmapEnabled) {
+    public CommandHandler(Weathering plugin, DynmapHandler dynmapHandler, EventChecker eventChecker, List<File> mcaFiles, List<File> hasEvents, List<File> noEvents) {
         this.plugin = plugin;
-        this.eventChecker = eventChecker;
         this.dynmapHandler = dynmapHandler;
+        this.eventChecker = eventChecker;
         this.mcaFiles = mcaFiles;
         this.hasEvents = Collections.synchronizedList(new ArrayList<>(hasEvents));
         this.noEvents = Collections.synchronizedList(new ArrayList<>(noEvents));
-        this.isDynmapEnabled = isDynmapEnabled;
         this.executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
@@ -75,117 +78,79 @@ public class CommandHandler implements CommandExecutor {
         return false;
     }
 
-    private void handleListCommandAsync(CommandSender sender) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                handleListCommand(sender);
-            }
-        }.runTaskAsynchronously(plugin);
-    }
 
-    private void handleListCommand(CommandSender sender) {
+    private void handleListCommandAsync(CommandSender sender) {
         sender.sendMessage("此命令需要较长时间加载，请等待...");
 
-        hasEvents.clear();
-        noEvents.clear();
+        // 使用并发集合来处理线程安全问题
+        ConcurrentLinkedQueue<File> hasEvents = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<File> noEvents = new ConcurrentLinkedQueue<>();
 
         int totalFiles = mcaFiles.size();
-        int batchSize = 100; // 每批处理的文件数量
+        int batchSize = 50; // 每批处理的文件数量
         AtomicInteger processedFiles = new AtomicInteger();
+        AtomicBoolean isShuttingDown = new AtomicBoolean(false);
+
+        // 使用固定大小的线程池
+        int poolSize = Math.min(10, totalFiles / batchSize + 1); // 线程池大小，至少1，最多10
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
         for (int i = 0; i < totalFiles; i += batchSize) {
             int start = i;
             int end = Math.min(i + batchSize, totalFiles);
 
             executor.submit(() -> {
-                for (int j = start; j < end; j++) {
-                    File mcaFile = mcaFiles.get(j);
-                    boolean hasEventsInRegion = checkEventsInRegionSync(mcaFile.getName());
+                try {
+                    for (int j = start; j < end; j++) {
+                        File mcaFile = mcaFiles.get(j);
+                        boolean hasEventsInRegion = eventChecker.getEventsInRegion(mcaFile.getName());
+                        // 打印信息
+                        plugin.getLogger().info("正在检查 " + mcaFile.getName() + " 区域的事件 " + hasEventsInRegion);
 
-                    synchronized (hasEvents) {
                         if (hasEventsInRegion) {
                             hasEvents.add(mcaFile);
                         } else {
                             noEvents.add(mcaFile);
                         }
                     }
-                }
 
-                synchronized (sender) {
-                    processedFiles.addAndGet((end - start));
-                    sender.sendMessage("已处理 " + processedFiles + " / " + totalFiles + " 个文件...");
-                }
+                    int processed = processedFiles.addAndGet((end - start));
+                    sender.sendMessage("已处理 " + processed + " / " + totalFiles + " 个文件...");
+                    plugin.getLogger().info("已处理 " + processed + " / " + totalFiles + " 个文件...");
 
-                if (processedFiles.get() >= totalFiles) {
-                    // 将有玩家事件和无玩家事件的列表写入文件
-                    writeFileAsync("hasEvents.txt", hasEvents, () -> {
-                        writeFileAsync("noEvents.txt", noEvents, () -> {
-                            new BukkitRunnable() {
-                                @Override
-                                public void run() {
-                                    sender.sendMessage("查询完成。" + hasEvents.size() + " 个区域有玩家事件，" + noEvents.size() + " 个区域无玩家事件。结果已写入文件。");
-                                }
-                            }.runTask(plugin);
+                    if (processed >= totalFiles && isShuttingDown.compareAndSet(false, true)) {
+                        // 将 ConcurrentLinkedQueue 转换为 ArrayList
+                        List<File> hasEventsList = new ArrayList<>(hasEvents);
+                        List<File> noEventsList = new ArrayList<>(noEvents);
+
+                        // 将有玩家事件和无玩家事件的列表写入文件
+                        writeFileAsync("hasEvents.txt", hasEventsList, () -> {
+                            writeFileAsync("noEvents.txt", noEventsList, () -> {
+                                new BukkitRunnable() {
+                                    @Override
+                                    public void run() {
+                                        sender.sendMessage("查询完成。" + hasEvents.size() + " 个区域有玩家事件，" + noEvents.size() + " 个区域无玩家事件。结果已写入文件。");
+                                    }
+                                }.runTask(plugin);
+                            });
                         });
-                    });
+
+                        // 关闭线程池
+                        executor.shutdown();
+                        try {
+                            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                                executor.shutdownNow();
+                            }
+                        } catch (InterruptedException e) {
+                            executor.shutdownNow();
+                        }
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().severe("处理文件时发生错误: " + e.getMessage());
+                    e.printStackTrace();
                 }
             });
         }
-    }
-
-    private boolean checkEventsInRegionSync(String mcaRegion) {
-        try {
-            String[] parts = mcaRegion.split("\\.");
-            int regionX = Integer.parseInt(parts[1]);
-            int regionZ = Integer.parseInt(parts[2]);
-
-            int startX = regionX * 512;
-            int startZ = regionZ * 512;
-            Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
-
-            List<String> restrictUsers = Collections.emptyList();
-            List<String> excludeUsers = Collections.emptyList();
-            List<Object> restrictBlocks = Collections.emptyList();
-            List<Object> excludeBlocks = Collections.emptyList();
-            List<Integer> actionList = Arrays.asList(1, 2, 6);
-
-            List<String[]> results = eventChecker.getEventsInRegion(mcaRegion, center, restrictUsers, excludeUsers, restrictBlocks, excludeBlocks, actionList);
-
-            return processResults(results);
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error checking region: " + mcaRegion);
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private boolean processResults(List<String[]> results) {
-        int blockActivityCount = 0;
-        int interactionActivityCount = 0;
-
-        for (String[] result : results) {
-            int actionType = Integer.parseInt(result[0]);
-            int count = Integer.parseInt(result[1]);
-
-            if (actionType == 1 || actionType == 2) {
-                blockActivityCount += count;
-            } else if (actionType == 6) {
-                interactionActivityCount += count;
-            }
-        }
-
-        return blockActivityCount > 128 || interactionActivityCount > 64;
-    }
-
-    private Location getCenterLocation(String mcaRegion) {
-        String[] parts = mcaRegion.split("\\.");
-        int regionX = Integer.parseInt(parts[1]);
-        int regionZ = Integer.parseInt(parts[2]);
-
-        int startX = regionX * 512;
-        int startZ = regionZ * 512;
-        return new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
     }
 
     private void writeFileAsync(String fileName, List<File> files, Runnable callback) {
@@ -234,15 +199,12 @@ public class CommandHandler implements CommandExecutor {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     Location location = player.getLocation();
                     String mcaRegion = getMCARegion(location);
-
-                    boolean willBeWeathered = !checkEventsInRegionSync(mcaRegion);
-                    if (willBeWeathered) {
-                        Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage("你所在的区域将会被风化,注意活动!"));
+                    if (eventChecker.getEventsInRegion(mcaRegion)) {
+                        player.sendMessage("你所在的区域将会被风化,注意活动!");
                     }
                 }
             }
         }.runTaskTimer(plugin, 0, interval * 20L); // 使用正确的 plugin 对象
-
         sender.sendMessage("提醒任务已启动，时间间隔为 " + interval + " 秒。");
     }
 
@@ -265,22 +227,23 @@ public class CommandHandler implements CommandExecutor {
     }
 
     private void handleRegionCheckAsync(CommandSender sender, String mcaRegion) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> handleRegionCheck(sender, mcaRegion));
-    }
-
-    private void handleRegionCheck(CommandSender sender, String mcaRegion) {
-        Location center = getCenterLocation(mcaRegion);
-
-        List<String[]> results = eventChecker.getEventsInRegion(mcaRegion, center, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Arrays.asList(1, 2, 6));
-        boolean hasEvents = processResults(results);
-
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (hasEvents) {
-                sender.sendMessage("MCA 区域 " + mcaRegion + " 有玩家活动，不会被风化。");
-            } else {
-                sender.sendMessage("MCA 区域 " + mcaRegion + " 没有玩家活动，会被风化。");
+        sender.sendMessage("此命令需要较长时间加载，请等待...");
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                boolean hasEvents = eventChecker.getEventsInRegion(mcaRegion);
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (hasEvents) {
+                            sender.sendMessage(mcaRegion + " 该区域有玩家活动。");
+                        } else {
+                            sender.sendMessage(mcaRegion + " 该区域无玩家活动。");
+                        }
+                    }
+                }.runTask(plugin); // 在主线程中运行
             }
-        });
+        }.runTaskAsynchronously(plugin); // 在异步线程中运行
     }
 
     private void handleDrawCommand(CommandSender sender, String[] args) {
@@ -309,10 +272,6 @@ public class CommandHandler implements CommandExecutor {
     }
 
     private void drawRegionsWithEvents() {
-        if (!isDynmapEnabled || dynmapHandler == null) {
-            plugin.getLogger().severe("Dynmap 未启用或不可用。");
-            return;
-        }
         for (File mcaFile : hasEvents) {
             drawRegion(mcaFile, true);
         }
@@ -320,10 +279,6 @@ public class CommandHandler implements CommandExecutor {
     }
 
     private void drawRegionsWithoutEvents() {
-        if (!isDynmapEnabled || dynmapHandler == null) {
-            plugin.getLogger().severe("Dynmap 未启用或不可用。");
-            return;
-        }
         for (File mcaFile : noEvents) {
             drawRegion(mcaFile, false);
         }
@@ -331,29 +286,13 @@ public class CommandHandler implements CommandExecutor {
     }
 
     private void clearDrawnRegions() {
-        if (!isDynmapEnabled || dynmapHandler == null) {
-            plugin.getLogger().severe("Dynmap 未启用或不可用。");
-            return;
-        }
         dynmapHandler.clearDrawnRegions();
         plugin.getLogger().info("清除完成。");
     }
 
-    private String getMCARegion(Location location) {
-        int regionX = location.getBlockX() >> 9;
-        int regionZ = location.getBlockZ() >> 9;
-        return "r." + regionX + "." + regionZ + ".mca";
-    }
 
     private void drawRegion(File mcaFile, boolean hasEvents) {
-        String[] parts = mcaFile.getName().split("\\.");
-        int regionX = Integer.parseInt(parts[1]);
-        int regionZ = Integer.parseInt(parts[2]);
-
-        int startX = regionX * 512;
-        int startZ = regionZ * 512;
-        Location center = new Location(plugin.getServer().getWorld("world"), startX + 256, 64, startZ + 256);
-
+        Location center = getCenterLocation(plugin, mcaFile.getName());
         dynmapHandler.drawSquareRegion("world", center.getX(), center.getY(), center.getZ(), 512, hasEvents);
     }
 }

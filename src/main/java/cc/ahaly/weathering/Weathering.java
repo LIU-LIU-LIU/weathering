@@ -1,5 +1,9 @@
 package cc.ahaly.weathering;
 
+import cc.ahaly.weathering.check.CoreProtectHandler;
+import cc.ahaly.weathering.check.DatabaseEventChecker;
+import cc.ahaly.weathering.check.EventChecker;
+import cc.ahaly.weathering.util.DatabaseManager;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -37,10 +41,10 @@ public final class Weathering extends JavaPlugin {
         // 读取和设置基础配置
         WEATHERING_TIME = config.getInt("WEATHERING_TIME", 7) * 86400; // 转换为秒
         MCA_DIR = config.getString("MCA_DIR", getDataFolder() + "/world/region");
-        String dataSource = config.getString("DATA_SOURCE", "CoreProtect-API");
+        boolean ENABLE_DATABASE = config.getBoolean("ENABLE_DATABASE", false);
 
         // 根据数据来源初始化不同的处理器
-        if (dataSource.equals("CoreProtect-API")) {
+        if (!ENABLE_DATABASE) {
             CoreProtectHandler coreProtectHandler = new CoreProtectHandler(this, null);
             CoreProtectAPI coreProtectAPI = coreProtectHandler.getCoreProtect();
             if (coreProtectAPI != null) {
@@ -51,7 +55,7 @@ public final class Weathering extends JavaPlugin {
                 getServer().getPluginManager().disablePlugin(this);
                 return;
             }
-        } else if (dataSource.equals("CoreProtect-DataBase")) {
+        } else {
             String host = config.getString("DATABASE.host", "localhost");
             int port = config.getInt("DATABASE.port", 3306);
             String database = config.getString("DATABASE.database", "coreprotect");
@@ -92,7 +96,7 @@ public final class Weathering extends JavaPlugin {
         getMCAFilesAsync(MCA_DIR)
                 .thenAcceptAsync(mcaFiles -> {
                     // 初始化命令处理程序
-                    CommandHandler commandHandler = new CommandHandler(this, eventChecker, dynmapHandler, mcaFiles, hasEvents, noEvents, isDynmapEnabled);
+                    CommandHandler commandHandler = new CommandHandler(this, dynmapHandler, eventChecker, mcaFiles, hasEvents, noEvents);
 
                     // 注册命令处理程序
                     Objects.requireNonNull(getCommand("weathering")).setExecutor(commandHandler);
