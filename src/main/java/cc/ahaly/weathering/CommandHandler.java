@@ -78,21 +78,18 @@ public class CommandHandler implements CommandExecutor {
         return false;
     }
 
-
     private void handleListCommandAsync(CommandSender sender) {
         sender.sendMessage("此命令需要较长时间加载，请等待...");
 
-        // 使用并发集合来处理线程安全问题
-        ConcurrentLinkedQueue<File> hasEvents = new ConcurrentLinkedQueue<>();
-        ConcurrentLinkedQueue<File> noEvents = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<File> hasEventsQueue = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<File> noEventsQueue = new ConcurrentLinkedQueue<>();
 
         int totalFiles = mcaFiles.size();
-        int batchSize = 50; // 每批处理的文件数量
+        int batchSize = 50;
         AtomicInteger processedFiles = new AtomicInteger();
         AtomicBoolean isShuttingDown = new AtomicBoolean(false);
 
-        // 使用固定大小的线程池
-        int poolSize = Math.min(10, totalFiles / batchSize + 1); // 线程池大小，至少1，最多10
+        int poolSize = Math.min(10, totalFiles / batchSize + 1);
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
         for (int i = 0; i < totalFiles; i += batchSize) {
@@ -104,13 +101,12 @@ public class CommandHandler implements CommandExecutor {
                     for (int j = start; j < end; j++) {
                         File mcaFile = mcaFiles.get(j);
                         boolean hasEventsInRegion = eventChecker.getEventsInRegion(mcaFile.getName());
-                        // 打印信息
                         plugin.getLogger().info("正在检查 " + mcaFile.getName() + " 区域的事件 " + hasEventsInRegion);
 
                         if (hasEventsInRegion) {
-                            hasEvents.add(mcaFile);
+                            hasEventsQueue.add(mcaFile);
                         } else {
-                            noEvents.add(mcaFile);
+                            noEventsQueue.add(mcaFile);
                         }
                     }
 
@@ -119,23 +115,27 @@ public class CommandHandler implements CommandExecutor {
                     plugin.getLogger().info("已处理 " + processed + " / " + totalFiles + " 个文件...");
 
                     if (processed >= totalFiles && isShuttingDown.compareAndSet(false, true)) {
-                        // 将 ConcurrentLinkedQueue 转换为 ArrayList
-                        List<File> hasEventsList = new ArrayList<>(hasEvents);
-                        List<File> noEventsList = new ArrayList<>(noEvents);
+                        List<File> hasEventsList = new ArrayList<>(hasEventsQueue);
+                        List<File> noEventsList = new ArrayList<>(noEventsQueue);
 
-                        // 将有玩家事件和无玩家事件的列表写入文件
                         writeFileAsync("hasEvents.txt", hasEventsList, () -> {
                             writeFileAsync("noEvents.txt", noEventsList, () -> {
                                 new BukkitRunnable() {
                                     @Override
                                     public void run() {
-                                        sender.sendMessage("查询完成。" + hasEvents.size() + " 个区域有玩家事件，" + noEvents.size() + " 个区域无玩家事件。结果已写入文件。");
+                                        sender.sendMessage("查询完成。" + hasEventsQueue.size() + " 个区域有玩家事件，" + noEventsQueue.size() + " 个区域无玩家事件。结果已写入文件。");
+                                        plugin.getLogger().info("更新 hasEvents 和 noEvents 列表...");
+                                        // 更新全局变量
+                                        hasEvents.clear();
+                                        hasEvents.addAll(hasEventsList);
+                                        noEvents.clear();
+                                        noEvents.addAll(noEventsList);
+                                        plugin.getLogger().info("更新完成： hasEvents=" + hasEvents.size() + ", noEvents=" + noEvents.size());
                                     }
                                 }.runTask(plugin);
                             });
                         });
 
-                        // 关闭线程池
                         executor.shutdown();
                         try {
                             if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
@@ -152,6 +152,7 @@ public class CommandHandler implements CommandExecutor {
             });
         }
     }
+
 
     private void writeFileAsync(String fileName, List<File> files, Runnable callback) {
         executor.submit(() -> {
@@ -262,7 +263,7 @@ public class CommandHandler implements CommandExecutor {
                 sender.sendMessage("绘制无事件的区域。");
                 break;
             case "clear":
-                clearDrawnRegions();
+                dynmapHandler.clearDrawnRegions();
                 sender.sendMessage("已清除绘制的区域。");
                 break;
             default:
@@ -284,12 +285,6 @@ public class CommandHandler implements CommandExecutor {
         }
         plugin.getLogger().info("绘制完成。" + noEvents.size() + " 个不活跃区域已绘制。");
     }
-
-    private void clearDrawnRegions() {
-        dynmapHandler.clearDrawnRegions();
-        plugin.getLogger().info("清除完成。");
-    }
-
 
     private void drawRegion(File mcaFile, boolean hasEvents) {
         Location center = getCenterLocation(plugin, mcaFile.getName());
