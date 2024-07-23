@@ -1,15 +1,21 @@
-# 风化时间,单位天，默认7天
-WEATHERING_TIME: 7
-
-#活跃活动标志列表，默认1,2
-ACTIVE_FLAG_LIST:
-  - 1
-  - 2
-
 #MCA 文件目录
 MCA_DIR: "/opt/MinecraftServer-AHA/survival/world/region"
 
+# 风化时间,单位天，默认7天
+WEATHERING_TIME: 7
+
+#在同一个区域MCA文件中查询方块事件阈值,以下俩个次数任意一个达到就判断为有玩家活跃区域。
+#查询方块事件阈值
+THRESHOLD: 128
+
+#查询互动事件阈值
+INTERACTION_THRESHOLD: 64
+
+#查询时允许的最大线程
+THREAD_MAX: 8
+
 #是否启用数据库模式，默认false:
+#不推荐使用数据库功能，效果没使用api好
 #false Coreprotect-DataBase
 #true CoreProtect-API
 ENABLE_DATABASE: false
@@ -21,4 +27,3 @@ DATABASE:
   database: coreprotect
   username: root
   password: root
-  table: co_block

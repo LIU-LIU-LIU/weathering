@@ -56,7 +56,7 @@ public class CoreProtectHandler implements  EventChecker{
             }
         }
         plugin.getLogger().info("该区域 方块事件: " + blockActivityCount + " 交互事件: " + interactionActivityCount);
-        return blockActivityCount > 512 || interactionActivityCount > 128;
+        return blockActivityCount > Weathering.THRESHOLD || interactionActivityCount > Weathering.INTERACTION_THRESHOLD;
     }
 
 

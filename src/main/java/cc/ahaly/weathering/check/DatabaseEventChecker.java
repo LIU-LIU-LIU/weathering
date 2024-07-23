@@ -7,9 +7,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class DatabaseEventChecker implements EventChecker {
 
@@ -25,7 +22,7 @@ public class DatabaseEventChecker implements EventChecker {
         int endZ = startZ + 511;
 
         try (Connection connection = DatabaseManager.getConnection()) {
-            String sql = "SELECT action, COUNT(*) AS count FROM coreprotect.co_block " +
+            String sql = "SELECT action, COUNT(*) AS count FROM co_block " +
                     "WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ? " +
                     "AND time > ? " +
                     "GROUP BY action";
@@ -38,20 +35,20 @@ public class DatabaseEventChecker implements EventChecker {
                 stmt.setLong(5, System.currentTimeMillis() / 1000 - Weathering.WEATHERING_TIME);
 
                 try (ResultSet rs = stmt.executeQuery()) {
-                    int type1And2Count = 0;
-                    int type6Count = 0;
+                    int blockActivityCount = 0;     // 放置方块或拆除方块的次数
+                    int interactionActivityCount = 0;    // 交互的次数
 
                     while (rs.next()) {
                         int action = rs.getInt("action");
                         // // 0: 破坏方块, 1: 放置方块, 2: 交互, 3: 击杀
                         if (action == 0 || action == 1) {
-                            type1And2Count ++;
+                            blockActivityCount ++;
                         } else if (action == 2) {
-                            type6Count ++;
+                            interactionActivityCount ++;
                         }
                     }
-
-                    return type1And2Count > 256 || type6Count > 64;
+                    System.out.println("该区域 方块事件: " + blockActivityCount + " 交互事件: " + interactionActivityCount);
+                    return blockActivityCount > Weathering.THRESHOLD || interactionActivityCount > Weathering.INTERACTION_THRESHOLD;
                 }
             }
         } catch (SQLException e) {

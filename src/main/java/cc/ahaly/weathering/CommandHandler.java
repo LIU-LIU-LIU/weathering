@@ -89,7 +89,7 @@ public class CommandHandler implements CommandExecutor {
         AtomicInteger processedFiles = new AtomicInteger();
         AtomicBoolean isShuttingDown = new AtomicBoolean(false);
 
-        int poolSize = Math.min(10, totalFiles / batchSize + 1);
+        int poolSize = Math.min(Weathering.THREAD_MAX, totalFiles / batchSize + 1);
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
         for (int i = 0; i < totalFiles; i += batchSize) {

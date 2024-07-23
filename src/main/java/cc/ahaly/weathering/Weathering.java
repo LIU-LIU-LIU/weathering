@@ -24,6 +24,9 @@ public final class Weathering extends JavaPlugin {
 
     public static int WEATHERING_TIME;
     private String MCA_DIR;
+    public static int THRESHOLD;
+    public static int INTERACTION_THRESHOLD;
+    public static int THREAD_MAX;
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
     private EventChecker eventChecker;
@@ -41,6 +44,12 @@ public final class Weathering extends JavaPlugin {
         // 读取和设置基础配置
         WEATHERING_TIME = config.getInt("WEATHERING_TIME", 7) * 86400; // 转换为秒
         MCA_DIR = config.getString("MCA_DIR", getDataFolder() + "/world/region");
+        THRESHOLD = config.getInt("THRESHOLD", 512);
+        INTERACTION_THRESHOLD = config.getInt("INTERACTION_THRESHOLD", 128);
+        THREAD_MAX = config.getInt("THREAD_MAX", 8);
+
+
+
         boolean ENABLE_DATABASE = config.getBoolean("ENABLE_DATABASE", false);
 
         // 根据数据来源初始化不同的处理器
