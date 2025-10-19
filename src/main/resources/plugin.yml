@@ -2,7 +2,7 @@ name: Weathering
 version: '${project.version}'
 main: cc.ahaly.weathering.Weathering
 api-version: '1.21'
-softdepend: [CoreProtect,dynmap]
+depend: [CoreProtect,dynmap]
 website: https://github.com/LIU-LIU-LIU/weathering
 description: 使用 CoreProtect的数据库和可选的 Dynmap 处理风化的插件。
 

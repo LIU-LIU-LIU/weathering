@@ -30,6 +30,7 @@ public final class Weathering extends JavaPlugin {
     public static int CACHE_EXPIRE_DAYS;
     public static int QUERY_RADIUS;
     public static long MIN_FILE_SIZE_BYTES;
+    public static boolean DEBUG_MODE;  // 新增：调试模式
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
     private EventChecker eventChecker;
@@ -53,6 +54,7 @@ public final class Weathering extends JavaPlugin {
         CACHE_EXPIRE_DAYS = config.getInt("CACHE_EXPIRE_DAYS", 30);
         QUERY_RADIUS = config.getInt("QUERY_RADIUS", 256);
         MIN_FILE_SIZE_BYTES = config.getInt("MIN_FILE_SIZE_KB", 1024) * 1024L; // 转换为字节
+        DEBUG_MODE = config.getBoolean("DEBUG_MODE", false);  // 新增：调试模式
 
 
 
