@@ -11,13 +11,27 @@ THRESHOLD: 128
 #查询互动事件阈值
 INTERACTION_THRESHOLD: 64
 
+#查询半径（格），默认256。注意：减小半径可以显著提升查询速度，但可能漏掉边缘活动
+#一个MCA区域是512x512格，半径256正好覆盖整个区域
+#如果查询太慢，可以尝试减小到128或64
+QUERY_RADIUS: 256
+
 #查询时允许的最大线程
 THREAD_MAX: 8
 
-#是否启用数据库模式，默认false:
-#不推荐使用数据库功能，效果没使用api好
-#false Coreprotect-DataBase
-#true CoreProtect-API
+#MCA文件最小大小过滤（KB）：小于此大小的区域文件将被跳过，默认1024KB(1MB)
+#只是路过生成的区域，文件通常只有几十KB，可以直接认为是无活动区域
+#设置为0表示不过滤
+MIN_FILE_SIZE_KB: 1024
+
+#缓存有效期（天）：超过此时间的缓存记录将被重新检查，默认30天
+CACHE_EXPIRE_DAYS: 30
+
+#【已废弃】是否启用数据库模式，默认false（建议保持false）
+#这是 v1.1 旧版本遗留参数，新版本不再维护数据库模式，不推荐使用
+#统一使用 CoreProtect API 调用即可，CoreProtect 内部无论使用数据库还是其他存储方式都不影响本插件
+#false: 使用 CoreProtect API（推荐）
+#true: 直接查询 CoreProtect 数据库（已废弃，不再维护）
 ENABLE_DATABASE: false
 
 #如果是数据库请填写数据库信息

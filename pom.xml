@@ -6,37 +6,59 @@
 
   <groupId>cc.ahaly</groupId>
   <artifactId>Weathering</artifactId>
-  <version>1.1-SNAPSHOT</version>
+  <version>1.2-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>Weathering</name>
 
   <properties>
-    <java.version>1.8</java.version>
+    <java.version>17</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
+  
+  <description>Minecraft 区块风化插件 - 自动删除长期无人活动的区块</description>
 
   <build>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.8.1</version>
+        <version>3.13.0</version>
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
+          <release>${java.version}</release>
         </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.2.4</version>
+        <version>3.5.1</version>
         <executions>
           <execution>
             <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <relocations>
+                <relocation>
+                  <pattern>com.alibaba.druid</pattern>
+                  <shadedPattern>cc.ahaly.weathering.libs.druid</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -90,7 +112,7 @@
       <dependency>
           <groupId>com.alibaba</groupId>
           <artifactId>druid</artifactId>
-          <version>1.2.6</version>
+          <version>1.2.23</version>
       </dependency>
 
   </dependencies>

@@ -27,6 +27,9 @@ public final class Weathering extends JavaPlugin {
     public static int THRESHOLD;
     public static int INTERACTION_THRESHOLD;
     public static int THREAD_MAX;
+    public static int CACHE_EXPIRE_DAYS;
+    public static int QUERY_RADIUS;
+    public static long MIN_FILE_SIZE_BYTES;
     private DynmapHandler dynmapHandler;
     private boolean isDynmapEnabled = false;
     private EventChecker eventChecker;
@@ -47,6 +50,9 @@ public final class Weathering extends JavaPlugin {
         THRESHOLD = config.getInt("THRESHOLD", 512);
         INTERACTION_THRESHOLD = config.getInt("INTERACTION_THRESHOLD", 128);
         THREAD_MAX = config.getInt("THREAD_MAX", 8);
+        CACHE_EXPIRE_DAYS = config.getInt("CACHE_EXPIRE_DAYS", 30);
+        QUERY_RADIUS = config.getInt("QUERY_RADIUS", 256);
+        MIN_FILE_SIZE_BYTES = config.getInt("MIN_FILE_SIZE_KB", 1024) * 1024L; // 转换为字节
 
 
 

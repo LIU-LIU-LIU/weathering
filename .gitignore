@@ -111,3 +111,6 @@ buildNumber.properties
 
 # Common working directory
 run/
+src/main/resources/hasEvents.txt
+src/main/resources/noEvents.txt
+src/main/resources/region_cache.txt

@@ -38,7 +38,7 @@ public class CoreProtectHandler implements  EventChecker{
         List<Integer> actionList = new ArrayList<>(Arrays.asList(0, 1, 2));// // 0: 破坏方块, 1: 放置方块, 2: 交互, 3: 击杀
 
         Location center = getCenterLocation(plugin, mcaRegion);
-        List<String[]> results = coreProtectAPI.performLookup(Weathering.WEATHERING_TIME, null, null, null, excludeBlocks, actionList, 256 , center);
+        List<String[]> results = coreProtectAPI.performLookup(Weathering.WEATHERING_TIME, null, null, null, excludeBlocks, actionList, Weathering.QUERY_RADIUS, center);
 
         int blockActivityCount = 0;     // 放置方块或拆除方块的次数
         int interactionActivityCount = 0;    // 交互的次数

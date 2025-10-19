@@ -15,9 +15,12 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -79,62 +82,182 @@ public class CommandHandler implements CommandExecutor {
     }
 
     private void handleListCommandAsync(CommandSender sender) {
-        sender.sendMessage("此命令需要较长时间加载，请等待...");
+        sender.sendMessage("========== 开始扫描区域 ==========");
+        plugin.getLogger().info("========== 开始扫描区域 ==========");
+        
+        // 显示MCA文件总数
+        int totalFiles = mcaFiles.size();
+        sender.sendMessage("§e世界区域文件总数: §a" + totalFiles + " §e个MCA文件");
+        plugin.getLogger().info("世界区域文件总数: " + totalFiles + " 个MCA文件");
 
+        // 读取缓存文件
+        File cacheFile = new File(plugin.getDataFolder(), "region_cache.txt");
+        Map<String, CacheEntry> cacheMap = new ConcurrentHashMap<>();
+        long currentTime = System.currentTimeMillis();
+        long cacheExpireMillis = Weathering.CACHE_EXPIRE_DAYS * 86400000L;
+
+        // 加载缓存
+        if (cacheFile.exists()) {
+            try {
+                List<String> lines = Files.readAllLines(cacheFile.toPath());
+                for (String line : lines) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length == 3) {
+                        String fileName = parts[0];
+                        long timestamp = Long.parseLong(parts[1]);
+                        boolean hasEvents = Boolean.parseBoolean(parts[2]);
+                        cacheMap.put(fileName, new CacheEntry(timestamp, hasEvents));
+                    }
+                }
+                sender.sendMessage("§e已加载缓存记录: §a" + cacheMap.size() + " §e条");
+                plugin.getLogger().info("已加载缓存记录: " + cacheMap.size() + " 条");
+            } catch (IOException e) {
+                plugin.getLogger().severe("读取缓存文件失败: " + e.getMessage());
+            }
+        } else {
+            sender.sendMessage("§e未找到缓存文件，将全量扫描");
+            plugin.getLogger().info("未找到缓存文件，将全量扫描");
+        }
+
+        // 过滤需要检查的文件（不在缓存中或缓存过期）
+        List<File> filesToCheck = new ArrayList<>();
         ConcurrentLinkedQueue<File> hasEventsQueue = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<File> noEventsQueue = new ConcurrentLinkedQueue<>();
+        int skippedBySize = 0;
 
-        int totalFiles = mcaFiles.size();
-        int batchSize = 50;
-        AtomicInteger processedFiles = new AtomicInteger();
+        for (File mcaFile : mcaFiles) {
+            // 检查文件大小，小于阈值的直接跳过
+            if (Weathering.MIN_FILE_SIZE_BYTES > 0 && mcaFile.length() < Weathering.MIN_FILE_SIZE_BYTES) {
+                noEventsQueue.add(mcaFile);
+                skippedBySize++;
+                continue;
+            }
+            
+            CacheEntry cache = cacheMap.get(mcaFile.getName());
+            if (cache == null || (currentTime - cache.timestamp) > cacheExpireMillis) {
+                filesToCheck.add(mcaFile);
+            } else {
+                // 使用缓存的结果
+                if (cache.hasEvents) {
+                    hasEventsQueue.add(mcaFile);
+                } else {
+                    noEventsQueue.add(mcaFile);
+                }
+            }
+        }
+
+        int cachedFiles = totalFiles - filesToCheck.size() - skippedBySize;
+        sender.sendMessage("§e├─ 直接使用缓存: §a" + cachedFiles + " §e个区域");
+        if (skippedBySize > 0) {
+            sender.sendMessage("§e├─ 文件过小跳过: §7" + skippedBySize + " §e个区域 §7(小于 " + (Weathering.MIN_FILE_SIZE_BYTES / 1024) + "KB)");
+            plugin.getLogger().info("├─ 文件过小跳过: " + skippedBySize + " 个区域 (小于 " + (Weathering.MIN_FILE_SIZE_BYTES / 1024) + "KB)");
+        }
+        sender.sendMessage("§e├─ 需要重新查询: §c" + filesToCheck.size() + " §e个区域");
+        sender.sendMessage("§e├─ 查询配置: §7半径=" + Weathering.QUERY_RADIUS + "格, 时间=" + (Weathering.WEATHERING_TIME / 86400) + "天, 线程=" + Weathering.THREAD_MAX);
+        sender.sendMessage("§e└─ 预计耗时: §c约 " + (filesToCheck.size() * 2 / 60) + " 分钟 §7(按每区域2秒估算)");
+        
+        plugin.getLogger().info("├─ 直接使用缓存: " + cachedFiles + " 个区域");
+        plugin.getLogger().info("├─ 需要重新查询: " + filesToCheck.size() + " 个区域");
+        plugin.getLogger().info("├─ 查询配置: 半径=" + Weathering.QUERY_RADIUS + "格, 时间=" + (Weathering.WEATHERING_TIME / 86400) + "天, 线程=" + Weathering.THREAD_MAX);
+        plugin.getLogger().info("└─ 开始查询...");
+        
+        if (filesToCheck.isEmpty()) {
+            sender.sendMessage("§a全部使用缓存，无需查询！");
+            plugin.getLogger().info("全部使用缓存，无需查询！");
+            // 全部使用缓存，直接更新列表和文件
+            updateResultsAndSave(sender, hasEventsQueue, noEventsQueue);
+            return;
+        }
+
+        sender.sendMessage("§e正在查询中，请耐心等待...");
+        long scanStartTime = System.currentTimeMillis();
+        
+        final int initialProcessed = cachedFiles + skippedBySize;  // 已经处理的数量（缓存+跳过）
+
+        int batchSize = 10;  // 减小批次大小，提高实时持久化频率
+        AtomicInteger processedFiles = new AtomicInteger(initialProcessed);
         AtomicBoolean isShuttingDown = new AtomicBoolean(false);
 
-        int poolSize = Math.min(Weathering.THREAD_MAX, totalFiles / batchSize + 1);
+        int poolSize = Math.min(Weathering.THREAD_MAX, filesToCheck.size() / batchSize + 1);
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
-        for (int i = 0; i < totalFiles; i += batchSize) {
+        // 用于实时写入缓存
+        Object cacheLock = new Object();
+
+        for (int i = 0; i < filesToCheck.size(); i += batchSize) {
             int start = i;
-            int end = Math.min(i + batchSize, totalFiles);
+            int end = Math.min(i + batchSize, filesToCheck.size());
 
             executor.submit(() -> {
                 try {
                     for (int j = start; j < end; j++) {
-                        File mcaFile = mcaFiles.get(j);
+                        File mcaFile = filesToCheck.get(j);
+                        
+                        int currentProgress = processedFiles.get() + 1;
+                        
+                        // 开始查询日志
+                        plugin.getLogger().info("[" + currentProgress + "/" + totalFiles + "] 正在查询 " + mcaFile.getName() + " ...");
+                        
+                        long startTime = System.currentTimeMillis();
                         boolean hasEventsInRegion = eventChecker.getEventsInRegion(mcaFile.getName());
-                        plugin.getLogger().info("正在检查 " + mcaFile.getName() + " 区域的事件 " + hasEventsInRegion);
+                        long queryTime = System.currentTimeMillis() - startTime;
+                        
+                        // 完成查询日志（带进度和耗时）
+                        plugin.getLogger().info("[" + currentProgress + "/" + totalFiles + "] " + mcaFile.getName() + " 完成，耗时 " + queryTime + "ms，结果: " + (hasEventsInRegion ? "活跃" : "空闲"));
 
                         if (hasEventsInRegion) {
                             hasEventsQueue.add(mcaFile);
                         } else {
                             noEventsQueue.add(mcaFile);
                         }
+
+                        // 每个文件查询完立即写入缓存，避免崩溃丢失数据
+                        synchronized (cacheLock) {
+                            try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(plugin.getDataFolder(), "region_cache.txt"), true))) {
+                                long timestamp = System.currentTimeMillis();
+                                writer.write(mcaFile.getName() + "|" + timestamp + "|" + hasEventsInRegion);
+                                writer.newLine();
+                                writer.flush();
+                            } catch (IOException e) {
+                                plugin.getLogger().severe("写入缓存文件失败: " + e.getMessage());
+                            }
+                        }
+
+                        int processed = processedFiles.incrementAndGet();
+                        
+                        // 每10个文件报告一次进度给玩家，带统计信息
+                        if (processed % 10 == 0) {
+                            long elapsed = (System.currentTimeMillis() - scanStartTime) / 1000;
+                            int scanned = processed - initialProcessed;  // 实际扫描数量
+                            double avgTime = scanned > 0 ? (double) elapsed / scanned : 0;
+                            int remaining = totalFiles - processed;
+                            int estimatedSeconds = (int) (remaining * avgTime);
+                            
+                            sender.sendMessage("§e[" + processed + "/" + totalFiles + "] §7已扫描:" + scanned + " §7平均:" + String.format("%.1f", avgTime) + "s/个 §7预计剩余:" + (estimatedSeconds / 60) + "分钟");
+                        }
                     }
 
-                    int processed = processedFiles.addAndGet((end - start));
-                    sender.sendMessage("已处理 " + processed + " / " + totalFiles + " 个文件...");
-                    plugin.getLogger().info("已处理 " + processed + " / " + totalFiles + " 个文件...");
-
-                    if (processed >= totalFiles && isShuttingDown.compareAndSet(false, true)) {
-                        List<File> hasEventsList = new ArrayList<>(hasEventsQueue);
-                        List<File> noEventsList = new ArrayList<>(noEventsQueue);
-
-                        writeFileAsync("hasEvents.txt", hasEventsList, () -> {
-                            writeFileAsync("noEvents.txt", noEventsList, () -> {
-                                new BukkitRunnable() {
-                                    @Override
-                                    public void run() {
-                                        sender.sendMessage("查询完成。" + hasEventsQueue.size() + " 个区域有玩家事件，" + noEventsQueue.size() + " 个区域无玩家事件。结果已写入文件。");
-                                        plugin.getLogger().info("更新 hasEvents 和 noEvents 列表...");
-                                        // 更新全局变量
-                                        hasEvents.clear();
-                                        hasEvents.addAll(hasEventsList);
-                                        noEvents.clear();
-                                        noEvents.addAll(noEventsList);
-                                        plugin.getLogger().info("更新完成： hasEvents=" + hasEvents.size() + ", noEvents=" + noEvents.size());
-                                    }
-                                }.runTask(plugin);
-                            });
-                        });
+                    // 检查是否全部完成
+                    int finalProcessed = processedFiles.get();
+                    if (finalProcessed >= totalFiles && isShuttingDown.compareAndSet(false, true)) {
+                        long totalElapsed = (System.currentTimeMillis() - scanStartTime) / 1000;
+                        int actualScanned = filesToCheck.size();
+                        
+                        sender.sendMessage("§a========== 扫描完成 ==========");
+                        sender.sendMessage("§e总耗时: §a" + (totalElapsed / 60) + " 分 " + (totalElapsed % 60) + " 秒");
+                        sender.sendMessage("§e实际查询: §a" + actualScanned + " §e个区域");
+                        if (actualScanned > 0) {
+                            sender.sendMessage("§e平均速度: §a" + String.format("%.2f", (double) totalElapsed / actualScanned) + " §e秒/区域");
+                        }
+                        
+                        plugin.getLogger().info("========== 扫描完成 ==========");
+                        plugin.getLogger().info("总耗时: " + (totalElapsed / 60) + " 分 " + (totalElapsed % 60) + " 秒");
+                        plugin.getLogger().info("实际查询: " + actualScanned + " 个区域");
+                        if (actualScanned > 0) {
+                            plugin.getLogger().info("平均速度: " + String.format("%.2f", (double) totalElapsed / actualScanned) + " 秒/区域");
+                        }
+                        
+                        updateResultsAndSave(sender, hasEventsQueue, noEventsQueue);
 
                         executor.shutdown();
                         try {
@@ -150,6 +273,72 @@ public class CommandHandler implements CommandExecutor {
                     e.printStackTrace();
                 }
             });
+        }
+    }
+
+    private void updateResultsAndSave(CommandSender sender, ConcurrentLinkedQueue<File> hasEventsQueue, ConcurrentLinkedQueue<File> noEventsQueue) {
+        List<File> hasEventsList = new ArrayList<>(hasEventsQueue);
+        List<File> noEventsList = new ArrayList<>(noEventsQueue);
+
+        // 显示最终统计
+        sender.sendMessage("§e活跃区域: §a" + hasEventsList.size() + " §e个");
+        sender.sendMessage("§e空闲区域: §7" + noEventsList.size() + " §e个");
+        sender.sendMessage("§e正在保存文件...");
+        
+        plugin.getLogger().info("最终统计 - 活跃区域: " + hasEventsList.size() + " 个，空闲区域: " + noEventsList.size() + " 个");
+
+        // 重新生成完整的缓存文件（去重并更新）
+        executor.submit(() -> {
+            File cacheFile = new File(plugin.getDataFolder(), "region_cache.txt");
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(cacheFile, false))) {
+                long currentTime = System.currentTimeMillis();
+                for (File file : hasEventsList) {
+                    writer.write(file.getName() + "|" + currentTime + "|true");
+                    writer.newLine();
+                }
+                for (File file : noEventsList) {
+                    writer.write(file.getName() + "|" + currentTime + "|false");
+                    writer.newLine();
+                }
+                writer.flush();
+                plugin.getLogger().info("缓存文件已更新，共 " + (hasEventsList.size() + noEventsList.size()) + " 条记录。");
+            } catch (IOException e) {
+                plugin.getLogger().severe("更新缓存文件失败: " + e.getMessage());
+            }
+        });
+
+        writeFileAsync("hasEvents.txt", hasEventsList, () -> {
+            writeFileAsync("noEvents.txt", noEventsList, () -> {
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        sender.sendMessage("§a所有文件已保存！");
+                        sender.sendMessage("§7- hasEvents.txt: " + hasEventsList.size() + " 个");
+                        sender.sendMessage("§7- noEvents.txt: " + noEventsList.size() + " 个");
+                        sender.sendMessage("§7- region_cache.txt: " + (hasEventsList.size() + noEventsList.size()) + " 个");
+                        
+                        plugin.getLogger().info("文件保存完成");
+                        plugin.getLogger().info("更新 hasEvents 和 noEvents 列表...");
+                        // 更新全局变量
+                        hasEvents.clear();
+                        hasEvents.addAll(hasEventsList);
+                        noEvents.clear();
+                        noEvents.addAll(noEventsList);
+                        plugin.getLogger().info("列表更新完成： hasEvents=" + hasEvents.size() + ", noEvents=" + noEvents.size());
+                    }
+                }.runTask(plugin);
+            });
+        });
+    }
+
+    // 缓存条目内部类
+    private static class CacheEntry {
+        final long timestamp;
+        final boolean hasEvents;
+
+        CacheEntry(long timestamp, boolean hasEvents) {
+            this.timestamp = timestamp;
+            this.hasEvents = hasEvents;
         }
     }
 
